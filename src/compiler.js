@@ -29,7 +29,7 @@ export async function compile(ast) {
     try {
         new Function(r);
     } catch (e) {
-        console.log(r);
+        //console.log(r);
         errors.push({ line: e.lineNumber, error: `OutputCheckError: ${e.name}: ${e.message}`});
         return { code: "", errors }
     }
@@ -45,7 +45,7 @@ function embedImports(imports) {
         out += `
 const ${imp.module} = (() => {
 ${imp.code.trim()}
-return ${imp.customReturn ? imp.customReturn : ("{ " + imp.functions.map(f => f.name).join(", ") + "}")}${props ? ", " + props : ""};
+return ${imp.customReturn ? imp.customReturn : ("{ " + imp.functions.map(f => f.name).join(", ") + (props ? ", " + props : "") + " }")}
 })();`;
     }
 
@@ -527,7 +527,8 @@ function compileExpr(tok) {
             return tok.value;
 
         case "group": {
-            return `( ${tok.data.map(compileExpr).join(" ")} )`;
+            const d = tok.data.map(compileExpr).join(" ");
+            return `( ${d} )`;
         }
 
         case "object": {

@@ -24,7 +24,7 @@ function read(p) {
 function clear() {
     Deno.stdout.writeSync(new TextEncoder().encode("\x1b[2J\x1b[3J\x1b[H"));
 }
-return { print, println, read, clear };
+return { print, println, read, clear }
 })();
 const time = (() => {
 function epochNow() { 
@@ -34,7 +34,7 @@ function epochNow() {
 async function sleep(time) { 
     await new Promise((r) => setTimeout(r, time));
 };
-return { epochNow, sleep };
+return { epochNow, sleep }
 })();
 const keyboard = (() => {
 let escapeKey = 3;
@@ -129,13 +129,13 @@ function charToKey(char) {
     
     return "";
 }
-return { enableRaw, disableRaw, getChar, charToKey, setQuitChar, clearBuffer };
+return { enableRaw, disableRaw, getChar, charToKey, setQuitChar, clearBuffer }
 })();
 const process = (() => {
 function exit(code) { 
     Deno.exit(code);
 };
-return { exit };
+return { exit }
 })();
 const fetch = (() => {
 async function get(url) { 
@@ -160,7 +160,7 @@ async function post(url, headers, body) {
         return { ok: false, status: r.status };
     }
 }
-return { get, post };
+return { get, post }
 })();
 const json = (() => {
 function stringify(data) {
@@ -174,7 +174,7 @@ function parse(data) {
         return {};
     }
 }
-return { stringify, parse };
+return { stringify, parse }
 })();
 String.prototype.toNumber=function(){return Number(this)}
 function numbers() { 

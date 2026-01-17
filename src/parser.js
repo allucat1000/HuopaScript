@@ -125,7 +125,7 @@ function tokenize(input, errors) {
 
 //#endregion tokenizer
 
-const params = [
+const operators = [
     { data: "==", name: "equals" },
     { data: "!=", name: "notEquals" },
     { data: "<=", name: "lte" },
@@ -237,7 +237,7 @@ function flushTemp(result, temp, state) {
 
 function matchOperator(s, i) {
     let op = null;
-    for (const p of params) {
+    for (const p of operators) {
         if (s.startsWith(p.data, i)) {
             if (!op || p.data.length > op.data.length) {
                 op = p;
@@ -303,11 +303,11 @@ function splitArgs(str) {
 
 //#region block parser
 
-function parseBlock(type, eL, ast, errors, line) {
+function parseBlock(type, exprList, ast, errors, line) {
     let ret;
 
     if (type === "func") {
-        ret = eL[1];
+        ret = exprList[1];
         if (!ret) {
             errors.push(`Line ${line + 1}: SyntaxError: Expected return type`);
             return { result: "error" };
@@ -316,7 +316,7 @@ function parseBlock(type, eL, ast, errors, line) {
     let rawParams = "";
     let inString = false;
     let inParams = false;
-    const rPD = eL.slice(type === "func" ? 2 : 1).join(" ");
+    const rPD = exprList.slice(type === "func" ? 2 : 1).join(" ");
     let i = 0;
     while (i < rPD.length) {
         const c = rPD[i];
@@ -385,10 +385,10 @@ function parseBlock(type, eL, ast, errors, line) {
 
 //#region cmd parser
 
-function parseCommand(ast, e, errors, line, p = false, constant = false) {
-    const eL = e.split(" ");
+function parseCommand(ast, expr, errors, line, p = false, constant = false) {
+    const exprList = expr.split(" ");
 
-    const t = eL[0];
+    const t = exprList[0];
 
     if (t === "return") {
         if (constant) {
@@ -396,7 +396,7 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
             return;
         }
         const tempAst = [];
-        const d = eL.slice(1).join(" ");
+        const d = exprList.slice(1).join(" ");
         parseCommand(tempAst, d, errors, line, true);
         const a = {
             type: "return",
@@ -412,7 +412,7 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
             return;
         }
         const tempAst = [];
-        const d = eL.slice(1).join(" ");
+        const d = exprList.slice(1).join(" ");
         parseCommand(tempAst, d, errors, line, false, true);
         const a = {
             ...tempAst[0],
@@ -423,7 +423,7 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
     }
 
     if (t === "await") {
-        const d = eL.slice(1).join(" ");
+        const d = exprList.slice(1).join(" ");
         const tempAst = [];
         parseCommand(tempAst, d, errors, line);
         const a = tempAst[0];
@@ -437,7 +437,7 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
             errors.push(`Line ${line + 1}: SyntaxError: Unexpected expression 'const'`);
             return;
         }
-        const d = eL.splice(1).join(" ");
+        const d = exprList.splice(1).join(" ");
         let i = 0;
         let inString = false;
         let im = "";
@@ -464,7 +464,7 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
     }
 
     if (t === "func") {
-        parseBlock("func", eL, ast, errors, line);
+        parseBlock("func", exprList, ast, errors, line);
         return;
     }
 
@@ -473,7 +473,7 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
             errors.push(`Line ${line + 1}: SyntaxError: Unexpected expression 'const'`);
             return;
         }
-        parseBlock("ifStatem", eL, ast, errors, line);
+        parseBlock("ifStatem", exprList, ast, errors, line);
         return;
     }
 
@@ -482,15 +482,15 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
             errors.push(`Line ${line + 1}: SyntaxError: Unexpected expression 'const'`);
             return;
         }
-        parseBlock("whileStatem", eL, ast, errors, line);
+        parseBlock("whileStatem", exprList, ast, errors, line);
         return;
     }
 
-    const declMatch = e.match(
+    const declMatch = expr.match(
         /^([\p{L}_][\p{L}\p{N}_<>]*)\s+([\p{L}_][\p{L}\p{N}_]*)\s*(=|\+=|-=)(?!=)\s*(.+)$/u
     );
 
-    const modMatch = e.match(
+    const modMatch = expr.match(
         /^([\p{L}_][\p{L}\p{N}_._]*)\s*(=|\+=|-=)(?!=)\s*(.+)$/u
     );
 
@@ -505,7 +505,7 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
         ast.push({
             type: "var",
             name,
-            op: params.find(p => p.data === op),
+            op: operators.find(p => p.data === op),
             declType,
             modif: false,
             data: tempAst
@@ -523,7 +523,7 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
             type: "var",
             name: parts.slice(0, -1).join(".") || parts[0],
             property: parts.length > 1 ? parts[parts.length - 1] : undefined,
-            op: params.find(p => p.data === op),
+            op: operators.find(p => p.data === op),
             data: tempAst,
             modif: true
         });
@@ -536,7 +536,7 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
         return;
     }
 
-    const s = eL.join(" ");
+    const s = exprList.join(" ");
     let state = "start";
     const result = [];
     let temp = "";
@@ -604,12 +604,23 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
                             return { result: "error" };
                         }
                     }
-
                     let innerExpr = "";
                     inString = false;
                     depth = 1;
                     j = i + 1;
-                    
+
+                    while (j < s.length && depth > 0) {
+                        const ch = s[j++];
+                        
+                        if (ch === '"' && s[j - 2] !== "\\") inString = !inString;
+                        if (!inString) {
+                            if (ch === "(") depth++;
+                            if (ch === ")") depth--;
+                        }
+                        
+                        if (depth > 0) innerExpr += ch;
+                    }
+
                     const tempAst = [];
                     parseCommand(tempAst, innerExpr, errors, line, true);
                     result.push({
@@ -637,7 +648,6 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
                         
                         data += ch;
                     }
-                    console.log(result);
                     let obj;
                     try {
                         obj = JSON.parse(data);
@@ -830,8 +840,8 @@ function parseCommand(ast, e, errors, line, p = false, constant = false) {
 
 function parseLevel(ast, l, errors, line) {
     for (let i = 0; i < l.length; i++) {
-        const e = l[i];
-        if (!e) continue;
-        parseCommand(ast, e, errors, line + i)
+        const expr = l[i];
+        if (!expr) continue;
+        parseCommand(ast, expr, errors, line + i)
     }
 }
