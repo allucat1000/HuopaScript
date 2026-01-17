@@ -1,0 +1,57 @@
+{
+    "module": "io",
+    "functions": [
+        {
+            "name": "print",
+            "params": ["any"],
+            "returns": "void",
+            "async": false,
+            "variadic": true
+        },
+        {
+            "name": "println",
+            "params": ["any"],
+            "returns": "void",
+            "async": false,
+            "variadic": true
+        },
+        {
+            "name": "read",
+            "params": ["string"],
+            "returns": "string",
+            "async": false,
+            "variadic": false
+        },
+        {
+            "name": "clear",
+            "params": [],
+            "returns": "void",
+            "async": false,
+            "variadic": false
+        }
+    ]
+}
+---
+function print(...data) {
+    const output = data.map(d => 
+        d.toString().replaceAll("\r", "\n")
+    ).join(" ");
+    Deno.stdout.writeSync(new TextEncoder().encode(output));
+}
+
+function println(...data) {
+    const output = data.map(d => 
+        d.toString().replaceAll("\r", "\n")
+    ).join(" ");
+    Deno.stdout.writeSync(new TextEncoder().encode(output + "\n"));
+}
+
+function read(p) {
+    const d = prompt(p);
+    return d;
+}
+
+
+function clear() {
+    Deno.stdout.writeSync(new TextEncoder().encode("\x1b[2J\x1b[3J\x1b[H"));
+}

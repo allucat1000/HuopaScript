@@ -1,0 +1,29 @@
+{
+    "module": "json",
+    "functions": [
+        {
+            "name": "stringify",
+            "params": ["object"],
+            "returns": "string",
+            "async": false
+        },
+        {
+            "name": "parse",
+            "params": ["string"],
+            "returns": ["object", "array"],
+            "async": false
+        }
+    ]
+}
+---
+function stringify(data) {
+    return JSON.stringify(data);
+}
+function parse(data) {
+    try {
+        return JSON.parse(data);
+    } catch (err) {
+        console.error(`SyntaxError: ${err.message}`);
+        return {};
+    }
+}

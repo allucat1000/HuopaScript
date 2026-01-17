@@ -1,0 +1,99 @@
+{
+    "module": "fs",
+    "functions": [
+        {
+            "name": "writeFile",
+            "params": ["string", "string"],
+            "returns": "void",
+            "async": true,
+            "variadic": false
+        },
+        {
+            "name": "readFile",
+            "params": ["string"],
+            "returns": "string",
+            "async": true,
+            "variadic": false
+        },
+        {
+            "name": "rmFile",
+            "params": ["string"],
+            "returns": "void",
+            "async": true,
+            "variadic": false
+        },
+        {
+            "name": "listDir",
+            "params": ["string"],
+            "returns": "string",
+            "async": true,
+            "variadic": false
+        },
+        {
+            "name": "rmDir",
+            "params": ["string"],
+            "returns": "void",
+            "async": true,
+            "variadic": false
+        },
+        {
+            "name": "makeDir",
+            "params": ["string"],
+            "returns": "void",
+            "async": true,
+            "variadic": false
+        }
+    ]
+}
+---
+async function writeFile(path, content) {
+    try {
+        await Deno.writeTextFile(path, content);
+    } catch {
+        console.error(`FileSystemError: Failed to write file '${path}'`);
+    }
+};
+async function readFile(path) {
+    let data; 
+    try {
+        data = await Deno.readTextFile(path);
+    } catch {
+        return "";
+    }
+    return data;
+};
+async function rmFile(path) {
+    try {
+        await Deno.remove(path);
+    } catch {
+        console.error(`FileSystemError: Failed to delete file '${path}'`);
+    }
+};
+async function listDir(path) {
+    let rawData; 
+    try {
+        rawData = Deno.readDir(path);
+    } catch {
+        console.error(`FileSystemError: Failed to list directory '${path}'`);
+        return "[]";
+    }
+    const data = [];
+    for await (const e of rawData) {
+        data.push(e.name);
+    }
+    return JSON.stringify(data);
+};
+async function rmDir(path) {
+    try {
+        await Deno.remove(path, { recursive: true });
+    } catch {
+        console.error(`FileSystemError: Failed to delete directory '${path}'`);
+    }
+};
+async function makeDir(path) {
+    try {
+        await Deno.mkdir("new_dir", { recursive: true });
+    } catch {
+        console.error(`FileSystemError: Failed to create directory '${path}'`);
+    }
+}

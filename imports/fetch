@@ -1,0 +1,40 @@
+{
+    "module": "fetch",
+    "functions": [
+        {
+            "name": "get",
+            "params": ["string"],
+            "returns": "object",
+            "async": true
+        },
+        {
+            "name": "post",
+            "params": ["string", "object", "string"],
+            "returns": "object",
+            "async": true
+        }
+    ]
+}
+---
+async function get(url) { 
+    const r = await globalThis.fetch(url);
+    if (r.ok) {
+        return { text: await r.text(), ok: true, status: r.status };
+    } else {
+        console.error(`NetworkError: Failed to fetch '${url}'`);
+        return { ok: false, status: r.status };
+    }
+};
+async function post(url, headers, body) {
+    const r = await globalThis.fetch(url, {
+        method: "POST",
+        headers: headers,
+        body
+    });
+    if (r.ok) {
+        return { text: await r.text(), ok: true, status: r.status };
+    } else {
+        console.error(`NetworkError: Failed to fetch '${url}'`);
+        return { ok: false, status: r.status };
+    }
+}

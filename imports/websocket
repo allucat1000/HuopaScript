@@ -1,0 +1,77 @@
+{
+    "module": "websocket",
+    "customReturn": "api",
+    "functions": [
+        {
+            "name": "connect",
+            "params": ["string"],
+            "returns": "bool",
+            "async": false
+        },
+        {
+            "name": "disconnect",
+            "params": [],
+            "returns": "bool",
+            "async": false
+        },
+        {
+            "name": "send",
+            "params": ["string"],
+            "returns": "bool",
+            "async": false
+        }
+    ],
+    "properties": [
+        {
+            "name": "onmessage",
+            "propName": "api",
+            "type": "function"
+        }
+    ]
+}
+---
+let _onmessage = () => {};
+let ws;
+function connect(url) {
+    if (ws) {
+        console.error(`WebSocket: websocket already exists`);
+        return false;
+    }
+    try {
+        ws = new WebSocket(url);
+
+        ws.onmessage = (event) => {
+            _onmessage(event?.data);
+        };
+    } catch {
+        return false;
+    }
+    return true;
+}
+function disconnect() {
+    if (!ws) {
+        console.error(`WebSocket: websocket not found`);
+        return false;
+    }
+    ws.close();
+    ws = null;
+    return true;
+}
+function send(data) {
+    if (!ws) {
+        console.error(`WebSocket: websocket not found`);
+        return false;
+    }
+    ws.send(data);
+    return true;
+}
+const api = { connect, disconnect, send };
+
+Object.defineProperty(api, "onmessage", {
+    get() {
+        return _onmessage;
+    },
+    set(fn) {
+        _onmessage = fn;
+    }
+});

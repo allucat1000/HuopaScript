@@ -1,0 +1,140 @@
+{
+    "module": "keyboard",
+    "functions": [
+        {
+            "name":"enableRaw",
+            "params": [],
+            "returns": "void",
+            "async": false,
+            "variadic": false
+        },
+        {
+            "name":"disableRaw",
+            "params": [],
+            "returns": "void",
+            "async": false,
+            "variadic": false
+        },
+        {
+            "name": "getChar",
+            "params": [],
+            "returns": "int",
+            "async": false,
+            "variadic": false
+        },
+        {
+            "name": "charToKey",
+            "params": ["int"],
+            "returns": "string",
+            "async": false,
+            "variadic": false
+        },
+        {
+            "name": "setQuitChar",
+            "params": ["int"],
+            "returns": "void",
+            "async": false,
+            "variadic": false
+        },
+        {
+            "name": "clearBuffer",
+            "params": [],
+            "returns": "void",
+            "async": false,
+            "variadic": false
+        }
+    ]
+}
+---
+let escapeKey = 3;
+
+let keyBuffer = [];
+let byteBuffer = [];
+
+(async () => {
+    const buffer = new Uint8Array(1);
+    const decoder = new TextDecoder();
+    
+    while (true) {
+        const d = await Deno.stdin.read(buffer);
+        if (d === null) break;
+        if (buffer[0] === escapeKey) {
+            Deno.stdin.setRaw(false);
+            console.log("");
+            Deno.exit(0);
+        }
+        
+        if (buffer[0] === 27) {
+            const seqBuf = new Uint8Array(2);
+            const read = await Deno.stdin.read(seqBuf);
+            
+            if (read && seqBuf[0] === 91) {
+                if (seqBuf[1] === 65) keyBuffer.push(1001);
+                else if (seqBuf[1] === 66) keyBuffer.push(1002);
+                else if (seqBuf[1] === 67) keyBuffer.push(1003);
+                else if (seqBuf[1] === 68) keyBuffer.push(1004);
+                else keyBuffer.push(buffer[0]);
+            } else {
+                keyBuffer.push(buffer[0]);
+            }
+        } 
+        else if (buffer[0] >= 194 && buffer[0] <= 244) {
+            byteBuffer.push(buffer[0]);
+            
+            let bytesToRead = 0;
+            if (buffer[0] >= 194 && buffer[0] <= 223) bytesToRead = 1;
+            else if (buffer[0] >= 224 && buffer[0] <= 239) bytesToRead = 2;
+            else if (buffer[0] >= 240 && buffer[0] <= 244) bytesToRead = 3;
+            
+            for (let i = 0; i < bytesToRead; i++) {
+                await Deno.stdin.read(buffer);
+                byteBuffer.push(buffer[0]);
+            }
+            
+            const decoded = decoder.decode(new Uint8Array(byteBuffer));
+            for (const char of decoded) {
+                keyBuffer.push(-char.charCodeAt(0));
+            }
+            byteBuffer = [];
+        }
+        else {
+            keyBuffer.push(buffer[0]);
+        }
+    }
+})();
+
+function enableRaw() {
+    Deno.stdin.setRaw(true);
+}
+
+function disableRaw() {
+    Deno.stdin.setRaw(false);
+}
+
+function clearBuffer() {
+    keyBuffer = [];
+}
+
+function getChar() { 
+    return keyBuffer.shift() || 0;
+}
+
+function setQuitChar(key) {
+    escapeKey = key;
+}
+
+function charToKey(char) {
+    if (char < 0) return String.fromCharCode(-char);
+    
+    if (char === 1001) return "";
+    if (char === 1002) return "";
+    if (char === 1003) return "";
+    if (char === 1004) return "";
+    
+    if (char === 13 || char === 10) return "\n";
+    if (char === 27) return "";
+    
+    if (char >= 32 && char <= 126) return String.fromCharCode(char);
+    
+    return "";
+}

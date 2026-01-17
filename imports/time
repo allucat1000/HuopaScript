@@ -1,0 +1,25 @@
+{
+    "module": "time",
+    "functions": [
+        {
+            "name": "epochNow",
+            "params": [],
+            "returns": "float",
+            "async": false
+        },
+        {
+            "name": "sleep",
+            "params": ["int"],
+            "returns": "void",
+            "async": true
+        }
+    ]
+}
+---
+function epochNow() { 
+    return performance.now();
+};
+
+async function sleep(time) { 
+    await new Promise((r) => setTimeout(r, time));
+};

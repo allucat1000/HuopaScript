@@ -1,0 +1,16 @@
+{
+    "module": "process",
+    "functions": [
+        {
+            "name": "exit",
+            "params": ["int"],
+            "returns": "void",
+            "async": false,
+            "variadic": false
+        }
+    ]
+}
+---
+function exit(code) { 
+    Deno.exit(code);
+};
