@@ -27,9 +27,8 @@ const a = parse(code);
 
 const pTime = performance.now();
 
-console.log("\x1b[32m%s\x1b[0m", "AST:\n")
-console.log(colorizeJSON(a.ast)
-);
+console.log("\x1b[32m%s\x1b[0m", "AST:\n");
+console.log(colorizeJSON(a.ast));
 
 function parseErrors(e) {
   let r = "";
