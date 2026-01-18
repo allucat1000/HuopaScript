@@ -67,7 +67,7 @@ func void fetching() {
 
 func void objects() {
 
-	object<string> obj = { "hi": "colon three" };
+	object<string> obj = { "hi": "epic" };
 	const string val = obj.hi;
 
 	io.println("object value: " + val);
@@ -87,6 +87,19 @@ func void objects() {
 	arr = json.parse(arrayString);
 
 	io.println("array loaded from string (stringified for log): " + json.stringify(arr));
+
+	object<object<string>> nestedobj = { "hello": { "hi": "yay" } };
+
+	io.println("nested object: " + json.stringify(nestedobj));
+
+	io.println("nested object value: " + nestedobj.hello.hi);
+
+	arr.push("hi");
+
+	io.println("array with new item 'hi': " + json.stringify(arr));
+
+	io.println("object entries: " + obj.entries());
+	
 }
 
 func void fib() {

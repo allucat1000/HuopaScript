@@ -52,7 +52,7 @@ return ${imp.customReturn ? imp.customReturn : ("{ " + imp.functions.map(f => f.
     return `(async() => {
 // Embedded imports
 ${out.trim()}
-String.prototype.toNumber=function(){return Number(this)}
+String.prototype.toNumber=function(){return Number(this)}; Object.prototype.entries=function(){return Object.entries(this)}; Object.prototype.keys=function(){return Object.keys(this)}; Object.prototype.values=function(){return Object.values(this)};
 `;
 }
 
@@ -134,7 +134,6 @@ const propertyTypes = {
             params: ["int", "int"],
             variadic: true
         },
-
         trim: {
             type: "string",
             convert: "trim",
@@ -142,12 +141,18 @@ const propertyTypes = {
             params: [],
             variadic: false
         },
-
         toNumber: {
             type: "number",
             convert: "toNumber",
             propType: "func",
             params: [],
+            variadic: false
+        },
+        split: {
+            type: "array",
+            convert: "split",
+            propType: "func",
+            params: ["string"],
             variadic: false
         }
     },
@@ -158,6 +163,52 @@ const propertyTypes = {
             propType: "func",
             params: [],
             variadic: false
+        }
+    },
+    object: {
+        keys: {
+            type: "array",
+            convert: "keys",
+            propType: "func",
+            params: [],
+            variadic: false
+        },
+        values: {
+            type: "array",
+            convert: "values",
+            propType: "func",
+            params: [],
+            variadic: false
+        },
+        entries: {
+            type: "array",
+            convert: "entries",
+            propType: "func",
+            params: [],
+            variadic: false
+        }
+    },
+    array: {
+        slice: {
+            type: "array",
+            convert: "slice",
+            propType: "func",
+            params: ["int", "int"],
+            variadic: true
+        },
+        join: {
+            type: "string",
+            convert: "join",
+            propType: "func",
+            params: ["string"],
+            variadic: false
+        },
+        push: {
+            type: "void",
+            convert: "push",
+            propType: "func",
+            params: ["any"],
+            variadic: true
         }
     }
 };

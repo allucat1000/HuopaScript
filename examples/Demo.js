@@ -176,7 +176,7 @@ function parse(data) {
 }
 return { stringify, parse }
 })();
-String.prototype.toNumber=function(){return Number(this)}
+String.prototype.toNumber=function(){return Number(this)}; Object.prototype.entries=function(){return Object.entries(this)}; Object.prototype.keys=function(){return Object.keys(this)}; Object.prototype.values=function(){return Object.values(this)};
 function numbers() { 
 let bleh = "2"
 let grah = bleh.toNumber()
@@ -219,7 +219,7 @@ let page = data.text
 io.println("example.com html: " + page)
 }
 function objects() { 
-let obj = { "hi": "colon three" }
+let obj = { "hi": "epic" }
 const val = obj.hi
 io.println("object value: " + val)
 let arr = ["blehh"]
@@ -231,6 +231,12 @@ io.println("arr reassignment: " + arrVal)
 let arrayString = "[\"1\"]"
 arr = json.parse(arrayString)
 io.println("array loaded from string (stringified for log): " + json.stringify(arr))
+let nestedobj = { "hello": { "hi": "yay" } }
+io.println("nested object: " + json.stringify(nestedobj))
+io.println("nested object value: " + nestedobj.hello.hi)
+arr.push("hi")
+io.println("array with new item 'hi': " + json.stringify(arr))
+io.println("object entries: " + obj.entries())
 }
 function fib() { 
 let a = ((0) | 0)
