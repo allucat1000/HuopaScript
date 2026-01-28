@@ -1451,10 +1451,10 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
                     homeDir = (home ?? homeWin) + "/";
                 }
                 path = path.replace("~/", homeDir);
-            } else if (!path.startsWith("/")) {
+            } else if (!path.startsWith("/") && !path.startsWith(".")) {
                 home = Deno.env.get("HOME");
                 homeWin = Deno.env.get("USERPROFILE");
-                path = (home ? home : homeWin) + "/huopascript/imports/" + path;
+                path = "imports/" + path;
             }
             const raw = await Deno.readTextFile(path);
             const [metaRaw, codeRaw] = raw.split("\n---\n");
