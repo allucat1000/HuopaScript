@@ -27,13 +27,74 @@ function parseParams(params, errors, line) {
         const typeStr = p.slice(0, lastSpace);
         const name = p.slice(lastSpace + 1);
 
-        const type = parseType(typeStr, errors, line);
+        let type = parseType(typeStr, errors, line);
         if (!type) continue;
+
+        if ((type.name === "object" || type.name === "array") && type.params.length === 0) {
+            type.params = [{ kind: "type", name: "any", params: [] }];
+        }
 
         res.push({ type, name });
     }
 
     return res;
+}
+
+function parseAccessChain(str) {
+    let i = 0;
+    let base = "";
+    const access = [];
+
+    while (i < str.length && /[\p{L}\p{N}_]/u.test(str[i])) {
+        base += str[i++];
+    }
+
+    while (i < str.length) {
+        if (str[i] === ".") {
+            i++;
+            let prop = "";
+            while (i < str.length && /[\p{L}\p{N}_]/u.test(str[i])) {
+                prop += str[i++];
+            }
+            if (!prop) break;
+            access.push({ kind: "prop", value: prop });
+            continue;
+        }
+
+        if (str[i] === "[") {
+            i++;
+            let depth = 1;
+            let inner = "";
+            let inString = false;
+
+            while (i < str.length && depth > 0) {
+                const c = str[i++];
+                if (c === '"' && str[i - 2] !== "\\") inString = !inString;
+                if (!inString) {
+                    if (c === "[") depth++;
+                    if (c === "]") depth--;
+                }
+                if (depth > 0) inner += c;
+            }
+
+            const tempAst = [];
+            parseCommand(tempAst, inner.trim(), [], 0, true);
+
+            access.push({
+                kind: "index",
+                value: tempAst.length === 1 ? tempAst[0] : tempAst
+            });
+            continue;
+        }
+
+        break;
+    }
+
+    return {
+        type: "variable",
+        value: base,
+        properties: access
+    };
 }
 
 //#region tokenizer
@@ -46,7 +107,7 @@ function tokenize(input, errors) {
     let semicolonUsed = true;
     let codeSinceSemicolon = false;
 
-    for (let i = 0; i < input.length; i++) {
+    for (let i = 0; i < input?.length; i++) {
         const c = input[i];
 
         if (c === '"' && input[i - 1] !== "\\") {
@@ -135,9 +196,13 @@ const operators = [
 
     { data: "+=", name: "addAssign" },
     { data: "-=", name: "subAssign" },
+    { data: "*=", name: "multiplyAssign" },
+    { data: "/=", name: "divideAssign" },
 
     { data: "+", name: "add" },
     { data: "-", name: "sub" },
+    { data: "*", name: "multiply" },
+    { data: "/", name: "divide" },
     { data: "=", name: "assign" },
 
     { data: "!", name: "not" },
@@ -203,22 +268,6 @@ function parseType(str, errors, line) {
     return result;
 }
 
-function handleProp(val) {
-    const s = val.split(".");
-    if (s.length > 1) {
-        return {
-            type: "variable",
-            value: s.slice(0, -1).join("."),
-            property: s.pop()
-        }
-    } else {
-        return {
-            type: "variable",
-            value: val
-        }
-    }
-}
-
 function flushTemp(result, temp, state) {
     if (!temp) return;
     if (state === "number") result.push({ type: "number", value: Number(temp) });
@@ -228,7 +277,7 @@ function flushTemp(result, temp, state) {
         } else if (isNull(temp)) {
             result.push({ type: "null", value: "null" })
         } else {
-            result.push(handleProp(temp.trim()));
+            result.push({ ...parseAccessChain(temp.trim()), propType: "var" });
         }
     }
     else if (state === "string") result.push({ type: "string", value: temp.trim() });
@@ -491,7 +540,7 @@ function parseCommand(ast, expr, errors, line, p = false, constant = false) {
     );
 
     const modMatch = expr.match(
-        /^([\p{L}_][\p{L}\p{N}_._]*)\s*(=|\+=|-=)(?!=)\s*(.+)$/u
+        /^([\p{L}_][\p{L}\p{N}_.\[\]"]*)\s*(=|\+=|-=)(?!=)\s*(.+)$/u
     );
 
     if (declMatch) {
@@ -518,14 +567,16 @@ function parseCommand(ast, expr, errors, line, p = false, constant = false) {
         const tempAst = [];
         parseCommand(tempAst, rhs, errors, line, true);
 
-        const parts = name.split(".");
+        const target = parseAccessChain(name);
+
         ast.push({
             type: "var",
-            name: parts.slice(0, -1).join(".") || parts[0],
-            property: parts.length > 1 ? parts[parts.length - 1] : undefined,
+            value: target.value,
+            properties: target.properties,
             op: operators.find(p => p.data === op),
             data: tempAst,
-            modif: true
+            modif: true,
+            propType: "var"
         });
         return;
     }
@@ -703,23 +754,7 @@ function parseCommand(ast, expr, errors, line, p = false, constant = false) {
             case "variable": {
 
                 if (s[i] === "(") {
-                    const raw = temp.trim().split(".");
-                    let name;
-                    let obj;
-                    
-                    if (raw.length === 1) {
-                        name = raw[0];
-                    } else {
-                        const firstPart = raw[0];
-                        
-                        if (raw.length === 2) {
-                            obj = [raw[0]];
-                            name = raw[1];
-                        } else {
-                            obj = raw.slice(0, -1);
-                            name = raw.pop();
-                        }
-                    }
+                    const prop = parseAccessChain(temp);
 
                     let depth = 1;
                     let j = i + 1;
@@ -746,16 +781,10 @@ function parseCommand(ast, expr, errors, line, p = false, constant = false) {
 
                     const a = {
                         type: "funcActivation",
-                        name,
-                        params
+                        params,
+                        ...prop,
+                        propType: "func"
                     };
-
-                    if (obj) {
-                        a.type = "variable";
-                        a.value = obj.join(".");
-                        a.propType = "func";
-                        a.property = name;
-                    }
 
                     result.push(a);
 
@@ -813,7 +842,7 @@ function parseCommand(ast, expr, errors, line, p = false, constant = false) {
             } else if (isNull(temp)) {
                 result.push({ type: "null", value: "null" })
             } else {
-                result.push(handleProp(temp.trim()));
+                result.push(parseAccessChain(temp.trim()));
             }
         } else if (state === "string") {
             result.push({ type: "string", value: temp.trim() });

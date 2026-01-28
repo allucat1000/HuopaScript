@@ -67,18 +67,18 @@ func void fetching() {
 
 func void objects() {
 
-	object<string> obj = { "hi": "epic" };
+	object<string> obj = { "hi": "epic sigma" };
 	const string val = obj.hi;
 
-	io.println("object value: " + val);
+	io.println("object value: " + obj.hi);
 
 	array<string> arr = ["blehh"];
-	string arrVal = arr.0;
+	string arrVal = arr[0];
 
 	io.println("array value: " + arrVal);
 
 	arr = ["hi"];
-	arrVal = arr.0;
+	arrVal = arr[0];
 
 	io.println("arr reassignment: " + arrVal);
 

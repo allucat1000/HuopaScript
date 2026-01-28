@@ -41,7 +41,7 @@ function print(...data) {
 
 function println(...data) {
     const output = data.map(d => 
-        d.toString().replaceAll("\r", "\n")
+        d ? d.toString().replaceAll("\r", "\n") : ""
     ).join(" ");
     Deno.stdout.writeSync(new TextEncoder().encode(output + "\n"));
 }

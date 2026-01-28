@@ -21,7 +21,6 @@ async function get(url) {
     if (r.ok) {
         return { text: await r.text(), ok: true, status: r.status };
     } else {
-        console.error(`NetworkError: Failed to fetch '${url}'`);
         return { ok: false, status: r.status };
     }
 };
@@ -34,7 +33,6 @@ async function post(url, headers, body) {
     if (r.ok) {
         return { text: await r.text(), ok: true, status: r.status };
     } else {
-        console.error(`NetworkError: Failed to fetch '${url}'`);
         return { ok: false, status: r.status };
     }
 }

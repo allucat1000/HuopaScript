@@ -29,7 +29,6 @@ export async function compile(ast) {
     try {
         new Function(r);
     } catch (e) {
-        //console.log(r);
         errors.push({ line: e.lineNumber, error: `OutputCheckError: ${e.name}: ${e.message}`});
         return { code: "", errors }
     }
@@ -63,51 +62,85 @@ const unaryOps = [
 const operatorTypes = {
     "+": {
         number: "number",
-        string: "string"
+        string: "string",
+        any: "any"
     },
     "-": {
-        number: "number"
+        number: "number",
+        any: "any"
+    },
+    "*": {
+        number: "number",
+        any: "any"
+    },
+    "/": {
+        number: "number",
+        any: "any"
     },
     "+=": {
         number: "number",
-        string: "string"
+        string: "string",
+        any: "any"
+    },
+    "-=": {
+        number: "number",
+        any: "any"
+    },
+    "*=": {
+        number: "number",
+        any: "any"
+    },
+    "/=": {
+        number: "number",
+        any: "any"
     },
     "<": {
-        number: "bool"
+        number: "bool",
+        any: "bool"
     },
     ">": {
-        number: "bool"
+        number: "bool",
+        any: "bool"
     },
     "<=": {
-        number: "bool"
+        number: "bool",
+        any: "bool"
     },
     ">=": {
-        number: "bool"
+        number: "bool",
+        any: "bool"
     },
     "==": {
         number: "bool",
         string: "bool",
-        boolean: "bool"
+        boolean: "bool",
+        any: "bool"
     },
     "!=": {
         number: "bool",
         string: "bool",
-        boolean: "bool"
+        boolean: "bool",
+        any: "bool"
     },
     "||": {
         boolean: "bool",
         string: "bool",
-        number: "bool"
+        number: "bool",
+        any: "bool"
     },
     "&&": {
         boolean: "bool",
         string: "bool",
-        number: "bool"
+        number: "bool",
+        any: "bool"
     },
     "!": {
         string: "bool",
         number: "bool",
         boolean: "bool",
+        any: "bool",
+        object: "bool",
+        array: "bool"
     }
 };
 
@@ -209,6 +242,18 @@ const propertyTypes = {
             propType: "func",
             params: ["any"],
             variadic: true
+        },
+        length: {
+            type: "number",
+            convert: "length",
+            propType: "str"
+        },
+        reverse: {
+            type: "array",
+            convert: "reverse",
+            params: [],
+            propType: "func",
+            variadic: false
         }
     }
 };
@@ -231,7 +276,7 @@ const varTypes = [
     { name: "string", type: "string" },
     { name: "void", type: "void" },
     { name: "bool", type: "boolean" },
-    { name: "null", type: "void" },
+    { name: "null", type: "any" },
 
     // Objects
     { name: "object", type: "object" },
@@ -266,7 +311,7 @@ function isAssignable(from, to) {
     }
 
     if (to.name === "any") return true;
-    if (from.name !== to.name) return false;
+    if (resolveType(from.name) !== resolveType(to.name)) return false;
 
     if (to.params.length === 0) return true;
     if (from.params.length !== to.params.length) return false;
@@ -297,6 +342,12 @@ function typeToString(t) {
     return "unknown";
 }
 
+function getLastProperty(properties) {
+    if (!properties || properties.length === 0) return null;
+    return properties[properties.length - 1];
+}
+
+
 function getTokenType(tok, scopes, errors, line) {
     if (tok.type === "funcActivation") {
         const local = findSymbol(tok.name, [scopes]);
@@ -305,7 +356,7 @@ function getTokenType(tok, scopes, errors, line) {
 
     if (tok.type === "group") {
         const d = parseExpr(tok.data, scopes, [], 0);
-        return { kind: "type", name: d.type, params: [] };
+        return { kind: "type", name: d.type.name, params: [] };
     }
 
     if (tok.type === "object" || tok.type === "array") {
@@ -323,47 +374,72 @@ function getTokenType(tok, scopes, errors, line) {
 
     if (tok.type === "variable") {
         const mod = imports.find(m => m.module === tok.value);
-        const fn = mod?.functions.find(f => f.name === tok.property);
-        const prop = mod?.properties?.find(p => p.name === tok.property);
         
-        if (fn) {
-            const r = fn.returnType;
-
-            if (Array.isArray(r)) {
-                return {
-                    kind: "union",
-                    types: r.map(t => parseType(t, errors, line))
-                };
+        if (mod && tok.properties && tok.properties.length > 0) {
+            const lastProp = getLastProperty(tok.properties);
+            
+            if (lastProp.kind === "method") {
+                const fn = mod.functions.find(f => f.name === lastProp.value);
+                if (fn) {
+                    const r = fn.returnType;
+                    if (Array.isArray(r)) {
+                        return {
+                            kind: "union",
+                            types: r.map(t => parseType(t, errors, line))
+                        };
+                    }
+                    return parseType(r ?? "any", errors, line);
+                }
+            } else if (lastProp.kind === "prop") {
+                const prop = mod.properties?.find(p => p.name === lastProp.value);
+                if (prop) {
+                    return parseType(prop.type ?? "any", errors, line);
+                }
             }
+        }
 
-            return parseType(r ?? "any", errors, line);
+        const v = findSymbol(tok.value, [scopes]);
+        if (v?.type === "func") {
+            return parseType(v.returnType ?? "any", errors, line);
+        }
+
+        
+        const baseVarType = v ? baseType(v.declType ?? v.type) : null;
+        
+        if (tok.properties && tok.properties.length > 0) {
+            let currentType = v?.declType ?? { kind: "type", name: "any", params: [] };
+            
+            for (const prop of tok.properties) {
+                if (prop.kind === "index") {
+                    if (currentType.name === "array" || currentType.name === "object") {
+                        currentType = currentType.params[0] ?? { kind: "type", name: "any", params: [] };
+                    } else {
+                        currentType = { kind: "type", name: "any", params: [] };
+                    }
+                } else if (prop.kind === "prop" || prop.kind === "method") {
+                    const propMap = propertyTypes[baseType(currentType)];
+                    if (propMap && propMap[prop.value]) {
+                        currentType = parseType(propMap[prop.value].type, errors, line);
+                    } else {
+                        currentType = { kind: "type", name: "any", params: [] };
+                    }
+                }
+            }
+            
+            return currentType;
         }
         
-        if (prop && tok.propType !== "func") {
-            return parseType(prop.type ?? "any", errors, line);
-        }
-    
-        const v = findSymbol(tok.value, [ scopes ]);
-        const r = v ? baseType(v.declType ?? v.type) : null;
-        if (tok.property) {
-            if (v?.declType?.kind === "type" && (v.declType.name === "object" || v.declType.name === "array")) {
-                return v.declType.params[0] ?? { kind: "type", name: "any", params: [] };
-            }
+        return baseVarType;
+    }
 
-            const propMap = propertyTypes[r];
-            if (propMap && propMap[tok.property]) {
-                return parseType(propMap[tok.property].type, [], 0);
-            }
-
-            return { kind: "type", name: "any", params: [] };
-        }
-        return r
+    if (tok.type === "func") {
+        return tok.declType;
     }
 
     if (tok.type === "uint" || tok.type === "int" || tok.type === "number") return { kind: "type", name: "number", params: [] };
     if (tok.type === "string") return { kind: "type", name: "string", params: [] };
     if (tok.type === "bool") return { kind: "type", name: "boolean", params: [] };
-    if (tok.type === "null") return { kind: "type", name: "void", params: [] };
+    if (tok.type === "null") return { kind: "type", name: "any", params: [] };
 
     return null;
 }
@@ -452,7 +528,7 @@ function typeCheckExpression(tokens, defined, expectedType, errors, line) {
                 return null;
             }
 
-            let current = baseType(operandType);
+            let current = resolveType(baseType(operandType));
             for (let k = 0; k < opCount; k++) {
                 const opRules = operatorTypes[tok.value];
                 if (!opRules || !opRules[current]) {
@@ -462,7 +538,7 @@ function typeCheckExpression(tokens, defined, expectedType, errors, line) {
                     });
                     return null;
                 }
-                current = baseType(opRules[current]);
+                current = resolveType(baseType(opRules[current]));
             }
 
             currentType = current;
@@ -537,7 +613,6 @@ function typeCheckExpression(tokens, defined, expectedType, errors, line) {
     }
 
     if (!isAssignable(actualTypeAst, expectedTypeAst)) {
-
         errors.push({
             line,
             error: `TypeError: Type '${typeToString(actualTypeAst)}' does not match '${typeToString(expectedTypeAst)}'`
@@ -562,17 +637,27 @@ function compileExpr(tok) {
         case "bool":
             return tok.value ? "true" : "false";
 
-        case "variable":
-            if (tok.property) {
-                if (tok.propType === "func" && tok.params !== undefined) {
-                    const args = tok.params
+        case "variable": {
+            let result = tok.value;
+            
+            if (tok.properties && tok.properties.length > 0) {
+                for (const prop of tok.properties) {
+                    if (prop.kind === "prop") {
+                        result += `.${prop.value}`;
+                    } else if (prop.kind === "index") {
+                        result += `[${compileExpr(prop.value)}]`;
+                    }
+                }
+                if (tok.propType === "func") {
+                    const args = (tok.params || [])
                         .map(p => p.map(compileExpr).join(" "))
                         .join(", ");
-                    return `${tok.value}.${tok.property}(${args})`;
+                    result += `(${args})`;
                 }
-                return `${tok.value}.${tok.property}`;
             }
-            return tok.value;
+            
+            return result;
+        }
 
         case "operator":
             return tok.value;
@@ -608,12 +693,38 @@ function compileExpr(tok) {
 
             return `${tok.name}(${args})`;
         }
+        case "func":
+            if (tok.arrow) {
+                const paramNames = tok.params.map(p => p.name ?? p);
+                const params = [];
+                
+                for (const o of tok.params) {
+                    let def = 0;
+                    if (o.type === "string")
+                        def = "";
+                    params.push({
+                        type: "var",
+                        value: def,
+                        ...o
+                    });
+                }
+                
+                let bodyCode = "";
+                for (const stmt of tok.data) {
+                    if (stmt.type === "expr") {
+                        bodyCode += stmt.data.map(compileExpr).join(" ");
+                    }
+                }
+                
+                return `(${paramNames.join(", ")}) => { ${bodyCode} }`;
+            }
+            return "";
 
         case "expr":
             return tok.data.map(compileExpr).join(" ");
 
         default:
-            throw new Error(`compileExpr: unknown token ${tok.type}`);
+            throw new Error(`compileExpr: unknown token ${JSON.stringify(tok)}`);
     }
 }
 
@@ -625,7 +736,7 @@ function parseType(typeStr, errors, line) {
     }
 
     if (typeof typeStr !== "string") {
-        throw new Error(`InternalError: Invalid type value '${JSON.stringify(typeStr)}'`)
+        throw new Error("grah")
         errors.push({
             line,
             error: `InternalError: Invalid type value '${JSON.stringify(typeStr)}'`
@@ -677,6 +788,10 @@ function baseType(t) {
     }
 
     return typeof t === "string" ? t : t.name;
+}
+
+function wrapType(type) {
+    return { kind: "type", name: type, params: [] };
 }
 
 function parseExpr(tokens, scope, errors, line) {
@@ -737,63 +852,81 @@ function parseExpr(tokens, scope, errors, line) {
         if (tok.type === "variable") {
             const sym = findSymbol(tok.value, [scope]);
             const mod = imports.find(m => m.module === tok.value);
-            const fn = mod?.functions.find(f => f.name === tok.property);
-            const prop = mod?.properties?.find(p => p.name === tok.property);
 
-            if (fn && tok.propType === "func") {
-                const returnType = fn.returnType;
-                if (Array.isArray(returnType)) {
-                    currentType = {
-                        kind: "union",
-                        types: returnType.map(t => parseType(t, errors, line))
-                    };
-                } else {
-                    currentType = parseType(returnType ?? "any", errors, line);
+            if (mod && tok.properties && tok.properties.length > 0) {
+                const lastProp = getLastProperty(tok.properties);
+                
+                if (lastProp.kind === "method") {
+                    const fn = mod.functions.find(f => f.name === lastProp.value);
+                    if (fn) {
+                        const returnType = fn.returnType;
+                        if (Array.isArray(returnType)) {
+                            currentType = {
+                                kind: "union",
+                                types: returnType.map(t => parseType(t, errors, line))
+                            };
+                        } else {
+                            currentType = parseType(returnType ?? "any", errors, line);
+                        }
+                        isAsync ||= fn.async;
+                        continue;
+                    }
+                } else if (lastProp.kind === "prop") {
+                    const prop = mod.properties?.find(p => p.name === lastProp.value);
+                    if (prop) {
+                        currentType = parseType(prop.type ?? "any", errors, line);
+                        continue;
+                    }
                 }
-                isAsync ||= fn.async;
-                continue;
             }
             
-            // Handle imported properties
-            if (prop) {
-                currentType = parseType(prop.type ?? "any", errors, line);
-                continue;
-            }
-            
-            if (!sym && !fn && !prop && !mod) {
+            if (!sym && !mod) {
                 return null;
             }
-            let symType = sym?.declType;
+            
+            let symType = sym?.declType ?? sym?.type;
     
-            if (tok.property) {
-                if (symType?.kind === "type" && (symType.name === "object" || symType.name === "array") && symType.params?.length === 1) {
-                    currentType = symType.params[0];
-                    continue;
+            if (tok.properties && tok.properties.length > 0) {
+                let workingType = symType;
+                
+                for (const prop of tok.properties) {
+                    if (prop.kind === "index") {
+                        if (workingType?.name === "array" || workingType?.name === "object") {
+                            workingType = workingType.params[0] ?? wrapType("any");
+                        } else {
+                            workingType = wrapType("any");
+                        }
+                    } else if (prop.kind === "prop" || prop.kind === "method") {
+                        const baseT = baseType(workingType);
+                        const propMap = propertyTypes[baseT];
+                        
+                        if (propMap && propMap[prop.value]) {
+                            workingType = parseType(propMap[prop.value].type, errors, line);
+                        } else {
+                            workingType = wrapType("any");
+                        }
+                    }
                 }
                 
-                const baseT = baseType(symType);
-                const propMap = propertyTypes[baseT];
-                if (propMap && propMap[tok.property]) {
-                    currentType = parseType(propMap[tok.property].type, errors, line);
-                    continue;
-                }
+                currentType = workingType;
+                continue;
             }
 
             currentType = symType;
         }
 
         if (tok.type === "number" || tok.type === "int" || tok.type === "uint") {
-            currentType = "number";
+            currentType = wrapType("number");
             continue;
         }
 
         if (tok.type === "string") {
-            currentType = "string";
+            currentType = wrapType("string");
             continue;
         }
 
         if (tok.type === "bool") {
-            currentType = "boolean";
+            currentType = wrapType("boolean");
             continue;
         }
 
@@ -802,19 +935,18 @@ function parseExpr(tokens, scope, errors, line) {
             if (!next) break;
 
             if (unaryOps.includes(tok.value)) {
-                const right = parseExpr([next], scope, errors, line);
+                const right = parseExpr(tokens.slice(i + 1), scope, errors, line);
                 if (!right) return null;
                 
-                const rightType = baseType(right.type);
+                const rightType = resolveType(baseType(right.type));
                 const rules = operatorTypes[tok.value];
                 
                 if (rules && rules[rightType]) {
-                    currentType = rules[rightType];
+                    currentType = wrapType(resolveType(rules[rightType]));
                     isAsync ||= right.async;
-                    i++;
+                    i += 2;
                     continue;
                 }
-                
                 errors.push({
                     line,
                     error: `Cannot apply '${tok.value}' to ${rightType}`
@@ -849,9 +981,23 @@ function parseExpr(tokens, scope, errors, line) {
     }
 
     return {
-        type: currentType ?? { kind: "type", name: "void" },
+        type: currentType ?? wrapType("void"),
         async: isAsync
     };
+}
+
+function compileAccessChain(p) {
+    let out = p.value;
+
+    for (const prop of p.properties ?? []) {
+        if (prop.kind === "prop") {
+            out += `.${prop.value}`;
+        } else if (prop.kind === "index") {
+            out += `[${compileExpr(prop.value)}]`;
+        }
+    }
+
+    return out;
 }
 
 async function compileParams(line, errors, args, expectedParams, scope = [], anySize = false) {
@@ -878,8 +1024,8 @@ async function compileParams(line, errors, args, expectedParams, scope = [], any
         if (argTokens.length === 1 && argTokens[0].type === "variable" && argTokens[0].propType !== "func") {
             const sym = findSymbol(argTokens[0].value, [scope]);
             const mod = imports.find(m => m.module === argTokens[0].value);
-            const fn = mod?.functions.find(f => f.name === argTokens[0].property);
-            const prop = mod?.properties?.find(p => p.name === argTokens[0].property);
+            const fn = mod?.functions.find(f => f.name === argTokens[0].properties[0]?.name);
+            const prop = mod?.properties?.find(p => p.name === argTokens[0].properties[0]?.name);
             
             if (!sym && !fn && !prop) {
                 errors.push({ line, error: `ReferenceError: Variable '${argTokens[0].value}' not found` });
@@ -889,7 +1035,10 @@ async function compileParams(line, errors, args, expectedParams, scope = [], any
             } else if (prop) {
                 inputtedType = baseType(prop.type);
             } else {
-                inputtedType = baseType(sym.declType ?? sym.type);
+                if (argTokens[0]?.properties?.length > 0) {
+                    inputtedType = "any";
+                } else
+                    inputtedType = baseType(sym.declType ?? sym.type);
             }
         } else {
             const parsed = await parseExpr(argTokens, scope, errors, line);
@@ -924,22 +1073,37 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
                 else
                     res += "let ";
             }
-            res += obj.name;
+            const name = obj.name ?? obj.value;
+            res += name;
             if (!obj.op?.data) {
                 res += ";";
                 break;
             }
-            const cur = currentScope.find(e => e.name === obj.name);
-            const found = defined.find(e => e.name === obj.name);
+            const cur = currentScope.find(e => e.name === name);
+            const found = defined.find(e => e.name === name);
 
-            const mod = imports.find(m => m.module === obj.name);
-            const modProp = mod?.properties?.find(p => p.name === obj.property);
+            const mod = imports.find(m => m.module === name);
+            let modProp = null;
+            
+            if (mod && obj.properties && obj.properties.length > 0) {
+                const lastProp = getLastProperty(obj.properties);
+                if (lastProp.kind === "prop") {
+                    modProp = mod.properties?.find(p => p.name === lastProp.value);
+                }
+            }
 
-            if (mod && obj.property && modProp) {
+            if (mod && modProp) {
                 const type = parseType(modProp.type ?? "any", errors, line);
                 typeCheckExpression(obj.data, [ ...defined, ...currentScope ], type, errors, line);
                 
-                res += `.${obj.property}`;
+                for (const prop of obj.properties) {
+                    if (prop.kind === "prop") {
+                        res += `.${prop.value}`;
+                    } else if (prop.kind === "index") {
+                        res += `[${compileExpr(prop.value)}]`;
+                    }
+                }
+                
                 res += ` ${obj.op.data} `;
                 
                 if (obj.await) {
@@ -959,7 +1123,8 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
                         res += await compileLine(p, currentScope, defined, line, errors, extra);
                         continue;
                     }
-                    res += `${(p.type === "string" ? JSON.stringify(p.value) : p.value)} `;
+                
+                    res += `${compileExpr(p)} `;
                 }
                 res = res.trim();
                 break;
@@ -975,17 +1140,13 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
                     `SyntaxError: Cannot modify constant`
                 })
             }
-            const type = obj.declType ?? (found?.declType ?? cur?.declType);
-            typeCheckExpression(obj.data, [ ...defined, ...currentScope ], type, errors, line);
-            const resolvedType =
-                obj.declType
-                ?? found?.declType
-                ?? cur?.declType;
+            const resolvedType = obj.declType ?? (found?.declType ?? cur?.declType);
+            typeCheckExpression(obj.data, [ ...defined, ...currentScope ], resolvedType, errors, line);
 
             if (!resolvedType) {
                 errors.push({
                     line,
-                    error: `InternalError: Unable to resolve type for variable '${obj.name}'`
+                    error: `InternalError: Unable to resolve type for variable '${name}'`
                 });
                 break;
             }
@@ -1012,10 +1173,10 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
                 constant: !!obj.constant
             });
             res += ` ${obj.op.data} `;
-            if (type.name === "int")
+            if (resolvedType.name === "int")
                 res += "((";
 
-            if (type.name === "uint")
+            if (resolvedType.name === "uint")
                 res += "(((";
             
             if (obj.await) {
@@ -1030,8 +1191,6 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
                 res += await compileLine({ ...f, await: obj.data[0].await }, currentScope, defined, line, errors, extra);
             } else {
                 for (const p of obj.data) {
-                    let cur;
-                    let found;
                     if (p?.type === "group") {
                         res += compileExpr(p);
                         continue;
@@ -1039,72 +1198,21 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
 
                     if (p?.type === "object" || p?.type === "array") {
                         res += p.data;
-                        break;
+                        continue;
                     }
                     
                     if (p?.type === "expr") {
-                        
                         res += await compileLine(p, currentScope, defined, line, errors, extra);
                         continue;
                     }
-                    let add = "";
-                    if (p?.type === "variable") {
-                        cur = currentScope.find(e => e.name === p.value);
-                        found = defined.find(e => e.name === p.value);
-                        const mod = imports.find(m => m.module === p.value);
-                        const fn = mod?.functions.find(f => f.name === p?.property);
-                        const prop = mod?.properties?.find(pr => pr.name === p?.property);
-                        
-                        if (!cur && !found && !fn && !prop) {
-                            errors.push({
-                                line,
-                                error: `ReferenceError: Variable '${p.value}' not found`
-                            });
-                        }
-                        
-                        if (prop && p.propType !== "func") {
-                            add += `.${p.property}`;
-                        } else if (cur && found && !fn &&p.property !== undefined && p.property !== null) {
-                            if (/^\d+$/.test(p.property)) {
-                                add += `[${p.property}]`;
-                            } else {
-                                add += `.${p.property}`;
-                            }
-                        }
-                    }
-                    if (p?.property) {
-                        let prop;
-                        const propMap = propertyTypes[resolveType(baseType(cur?.declType ?? found?.declType ?? null))] ?? [];
-                        if (propMap[p.property]) {
-                            const r = propMap[p.property]
-                            prop = r.propType === "str" ? r.convert : null;
-                        }
-                        if (p.propType === "var" && prop) add += "." + prop;
-                        if (p.propType === "func") {
-                            const mod = imports.find(m => m.module === p.value);
-                            const fn = mod?.functions.find(f => f.name === p.property);
-                            const r = propMap[p.property];
-                            if (fn) {
-                                const compiledArgs = await compileParams( line, errors, p.params, fn.params, [ ...currentScope, ...defined ], fn.variadic ); 
-                                add += `.${p.property}(${compiledArgs.join(", ")})`;
-                            } else if (r?.propType === "func") {
-                                const compiledArgs = await compileParams( line, errors, p.params ?? [], r.params ?? [], [ ...currentScope, ...defined ], r.variadic ); 
-                                add += `(${compiledArgs.join(", ")})`;
-                            } else {
-                                errors.push({
-                                    line,
-                                    error: `TypeError: Cannot find function '${p.property}' on ${p.value}`
-                                });
-                            }
-                        }
-                    }
-                    res += `${(p.type === "string" ? JSON.stringify(p.value) : p.value) + add} `;
+                    
+                    res += `${compileExpr(p)} `;
                 }
             }
 
-            if (type.name === "int")
+            if (resolvedType.name === "int")
                 res = res.trim() + ") | 0)";
-            else if (type.name === "uint")
+            else if (resolvedType.name === "uint")
                 res = res.trim() + ") | 0) >>> 0)";
             else
                 res = res.trim()
@@ -1131,8 +1239,12 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
                     const cur = currentScope.find(e => e.name === p.value);
                     const found = defined.find(e => e.name === p.value);
                     const mod = imports.find(m => m.module === p.value);
-                    const fn = mod?.functions.find(f => f.name === p.property);
-                    const prop = mod?.properties?.find(pr => pr.name === p.property);
+                    const lastProp = p.properties?.[p.properties.length - 1];
+                    const fn = lastProp?.kind === "prop"
+                        ? mod?.functions.find(f => f.name === lastProp.value)
+                        : null;
+
+                    const prop = mod?.properties?.find(pr => pr.name === p.properties[0]?.value);
                     
                     if (!cur && !found && !fn && !prop) {
                         errors.push({
@@ -1143,24 +1255,21 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
                         continue;
                     }
                     
-                    // Handle imported function calls
-                    if (fn && p.propType === "func") {
+                    if ((cur || found || fn) && p.propType === "func") {
                         if (obj.await) {
                             extra.async ||= true;
                             res += "await ";       
                         }
-                        const compiledArgs = await compileParams(line, errors, p.params ?? [], fn.params, [...currentScope, ...defined], fn.variadic); 
-                        res += `${p.value}.${p.property}(${compiledArgs.join(", ")})`;
+                        const compiledArgs = await compileParams(line, errors, p.params ?? [], fn?.params ?? cur?.params ?? found?.params, [...currentScope, ...defined], fn?.variadic ?? cur?.variadic ?? found?.variadic); 
+                        res += `${compileAccessChain(p)}(${compiledArgs.join(", ")})`;
                         continue;
                     }
                     
-                    // Handle imported properties
                     if (prop && p.propType !== "func") {
-                        res += `${p.value}.${p.property}`;
+                        res += `${compileAccessChain(p)}`;
                         continue;
                     }
                     
-                    // Handle local variable methods
                     if (p.propType === "func") {
                         const varType = baseType(cur?.declType ?? found?.declType);
                         const propMap = propertyTypes[varType];
@@ -1174,9 +1283,8 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
                         }
                     }
                     
-                    // Handle local variable properties
                     let propAccess = "";
-                    if (p.property && !p.propType) {
+                    if (p.propertyies && !p.propType) {
                         const varType = baseType(cur?.declType ?? found?.declType);
                         const propMap = propertyTypes[varType];
                         if (propMap && propMap[p.property]) {
@@ -1263,10 +1371,10 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
                 line
             );
             const t = condType?.type.name;
-            if (t !== "bool" && t !== "boolean") {
+            if (t !== "bool" && t !== "boolean" && t !== "any") {
                 errors.push({
                     line,
-                    error: `TypeError: ${obj.type.startsWith("if") ? "If" : "While"} statement condition must be 'bool'`
+                    error: `TypeError: expected condition to be of type 'bool', got '${t}'`
                 });
                 break;
             }
@@ -1384,6 +1492,53 @@ async function compileLine(obj, currentScope, defined, line, errors, extra) {
 
             break;
         }
+
+        case "return": {
+            res += "return ";
+            if (extra.toplevel) {
+                errors.push({
+                    line,
+                    error: `SyntaxError: Cannot put return statement on top level`
+                });
+            }
+            const parsed = parseExpr(obj.data, [ ...currentScope, ...defined ], errors, line);
+            if (extra.returnType && baseType(parsed.type) !== baseType(extra.returnType) && baseType(parsed.type) !== "any") {
+                errors.push({
+                    line,
+                    error: `TypeError: Invalid return type, expected '${baseType(extra.returnType)}', got '${baseType(parsed.type)}'`
+                });
+            }
+
+            if (
+                obj.data.length === 1 &&
+                (obj.data[0].type === "expr" && obj.data[0].data.length === 1 && obj.data[0].data[0].type === "funcActivation") ||
+                obj.data[0]?.type === "funcActivation"
+            ) {
+                const f = obj.data[0].type === "expr" ? obj.data[0].data[0] : obj.data[0];
+                res += await compileLine({ ...f, await: obj.data[0].await }, currentScope, defined, line, errors, extra);
+            } else {
+                for (const p of obj.data) {
+                    if (p?.type === "group") {
+                        res += compileExpr(p);
+                        continue;
+                    }
+
+                    if (p?.type === "object" || p?.type === "array") {
+                        res += p.data;
+                        continue;
+                    }
+                    
+                    if (p?.type === "expr") {
+                        res += await compileLine(p, currentScope, defined, line, errors, extra);
+                        continue;
+                    }
+                    
+                    res += `${compileExpr(p)} `;
+                }
+            }
+            break;
+        }
+
 
         default: {
             errors.push({ line, error: 

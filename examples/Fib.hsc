@@ -1,20 +1,19 @@
 import "io";
+import "time";
+
+float perf = time.epochNow();
 
 int a = 0;
 int b = 1;
 int c = 0;
 int count = 0;
 
-func void fib() { 
-    if (count == 10) {
-        return;
-    }
+while (count < 10) {
     c = a + b;
     a = b;
     b = c;
-    io.print(c);
+    io.println(c);
     count += 1;
-    fib();
 }
 
-fib();
+io.println("took: " + (time.epochNow() - perf) + "ms");

@@ -12,6 +12,18 @@
             "params": ["int"],
             "returns": "void",
             "async": true
+        },
+        {
+            "name": "newDate",
+            "params": ["int"],
+            "returns": "object",
+            "async": false
+        },
+        {
+            "name": "format",
+            "params": ["object"],
+            "returns": "string",
+            "async": false
         }
     ]
 }
@@ -23,3 +35,38 @@ function epochNow() {
 async function sleep(time) { 
     await new Promise((r) => setTimeout(r, time));
 };
+function newDate(date) {
+    let d;
+    try {
+        d = new Date(date);
+    } catch {
+        return {};
+    }
+    return {
+        h: d.getHours(),
+        m: d.getMinutes(),
+        s: d.getSeconds(),
+        ms: d.getMilliseconds(),
+
+        uH: d.getUTCHours(),
+        uM: d.getUTCMinutes(),
+        uS: d.getUTCSeconds(),
+        uMs: d.getUTCMilliseconds(),
+
+        d: d.getDate(),
+        day: d.getDay(),
+        y: d.getFullYear(),
+        mo: d.getMonth(),
+
+        uD: d.getUTCDate(),
+        uDay: d.getUTCDay(),
+        uY: d.getUTCFullYear(),
+        uMo: d.getUTCMonth()
+    }
+}
+function format(date) {
+    function pad(n) {
+        return n.toString().padStart(2, "0");
+    }
+    return `${date.y}-${pad(date.mo + 1)}-${pad(date.d)} ${pad(date.h)}:${pad(date.m)}`;
+}

@@ -10,7 +10,7 @@ function print(...data) {
 
 function println(...data) {
     const output = data.map(d => 
-        d.toString().replaceAll("\r", "\n")
+        d ? d.toString().replaceAll("\r", "\n") : ""
     ).join(" ");
     Deno.stdout.writeSync(new TextEncoder().encode(output + "\n"));
 }
@@ -34,7 +34,42 @@ function epochNow() {
 async function sleep(time) { 
     await new Promise((r) => setTimeout(r, time));
 };
-return { epochNow, sleep }
+function newDate(date) {
+    let d;
+    try {
+        d = new Date(date);
+    } catch {
+        return {};
+    }
+    return {
+        h: d.getHours(),
+        m: d.getMinutes(),
+        s: d.getSeconds(),
+        ms: d.getMilliseconds(),
+
+        uH: d.getUTCHours(),
+        uM: d.getUTCMinutes(),
+        uS: d.getUTCSeconds(),
+        uMs: d.getUTCMilliseconds(),
+
+        d: d.getDate(),
+        day: d.getDay(),
+        y: d.getFullYear(),
+        mo: d.getMonth(),
+
+        uD: d.getUTCDate(),
+        uDay: d.getUTCDay(),
+        uY: d.getUTCFullYear(),
+        uMo: d.getUTCMonth()
+    }
+}
+function format(date) {
+    function pad(n) {
+        return n.toString().padStart(2, "0");
+    }
+    return `${date.y}-${pad(date.mo + 1)}-${pad(date.d)} ${pad(date.h)}:${pad(date.m)}`;
+}
+return { epochNow, sleep, newDate, format }
 })();
 const keyboard = (() => {
 let escapeKey = 3;
@@ -143,7 +178,6 @@ async function get(url) {
     if (r.ok) {
         return { text: await r.text(), ok: true, status: r.status };
     } else {
-        console.error(`NetworkError: Failed to fetch '${url}'`);
         return { ok: false, status: r.status };
     }
 };
@@ -156,7 +190,6 @@ async function post(url, headers, body) {
     if (r.ok) {
         return { text: await r.text(), ok: true, status: r.status };
     } else {
-        console.error(`NetworkError: Failed to fetch '${url}'`);
         return { ok: false, status: r.status };
     }
 }
@@ -219,9 +252,9 @@ let page = data.text
 io.println("example.com html: " + page)
 }
 function objects() { 
-let obj = { "hi": "epic" }
+let obj = { "hi": "epic sigma" }
 const val = obj.hi
-io.println("object value: " + val)
+io.println("object value: " + obj.hi)
 let arr = ["blehh"]
 let arrVal = arr[0]
 io.println("array value: " + arrVal)
@@ -234,7 +267,7 @@ io.println("array loaded from string (stringified for log): " + json.stringify(a
 let nestedobj = { "hello": { "hi": "yay" } }
 io.println("nested object: " + json.stringify(nestedobj))
 io.println("nested object value: " + nestedobj.hello.hi)
-arr.push("hi")
+arr.push()
 io.println("array with new item 'hi': " + json.stringify(arr))
 io.println("object entries: " + obj.entries())
 }
